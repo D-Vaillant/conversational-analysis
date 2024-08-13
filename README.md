@@ -1,17 +1,13 @@
-# conversational-memory
+# conversational-analysis
 
-# We take the Friends corpus dataset from X, put it into LlamaIndex backed by Milvus, and then
-# use a subset of questions drawn from the below to test an actor with all of that knowledge.
+We analyze data taken from: https://zissou.infosci.cornell.edu/convokit/datasets/friends-corpus/
 
-https://parade.com/1061827/alexandra-hurtado/friends-trivia-questions/
+For the ingestion/Milvus part, uses:
+* pymilvus
+* llama-index
+* llama-index-vector-stores-milvus
 
-Uses:
-pymilvus
-llama-index
-llama-index-vector-stores-milvus
-llama-index-readers-json
+For the torch part, uses torch and Pytorch Lightning.
 
 For testing with openai, uses:
-openai
-
-For testing locally, uses llama.cpp.
+    openai
