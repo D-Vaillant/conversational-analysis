@@ -1,0 +1,24 @@
+[tool.poetry]
+name = "conversational-memory"
+version = "0.2.0"
+description = "A conversational memory database system for RAG."
+authors = ["David Vaillant <david@vaillant.io>"]
+license = "MIT"
+readme = "README.md"
+
+[tool.poetry.dependencies]
+python = "^3.11"
+pymilvus = "^2.4.5"
+llama-index = "^0.10.65"
+llama-index-vector-stores-milvus = "^0.1.23"
+torch = "^2.4.0"
+lightning = "^2.4.0"
+python-dotenv = "^1.0.1"
+
+
+[tool.poetry.group.dev.dependencies]
+ipykernel = "^6.29.5"
+
+[build-system]
+requires = ["poetry-core"]
+build-backend = "poetry.core.masonry.api"

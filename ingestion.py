@@ -17,6 +17,7 @@ from llama_index.vector_stores.milvus import MilvusVectorStore
 from llama_integrations import UtteranceNodeParser, UtteranceReader
 
 USING_OPENAI = True
+CACHE_PIPELINE = False
 i = 2
 
 if USING_OPENAI:
@@ -50,10 +51,11 @@ if __name__ == "__main__":
         transformations=[UtteranceNodeParser(),
                          embedding_model]
     )
-    if os.path.exists("./pipeline_storage"):
+    if CACHE_PIPELINE and os.path.exists("./pipeline_storage"):
         pipeline.load("./pipeline_storage")
     nodes = pipeline.run(documents=convos, show_progress=True)
-    pipeline.persist("./pipeline_storage")
+    if CACHE_PIPELINE:
+        pipeline.persist("./pipeline_storage")
     
     vector_store = MilvusVectorStore(collection_name=COLLECTION_NAME,
         uri="http://localhost:19530", dim=1536, overwrite=True
