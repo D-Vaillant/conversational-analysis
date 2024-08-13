@@ -1,11 +1,12 @@
-"""JSON node parser."""
+"""Parses `utterances.jsonl` from the Cornell Friends dialogue dataset.
+In theory, works for any other JSONL file in a similar format.
+"""
 import json
 from pathlib import Path
-from typing import Any, Dict, Generator, List, Optional, Sequence
+from typing import Any, Dict, List, Optional, Sequence
 
 from llama_index.core.callbacks.base import CallbackManager
 from llama_index.core.node_parser.interface import NodeParser
-from llama_index.core.node_parser.node_utils import build_nodes_from_splits
 from llama_index.core.schema import BaseNode, MetadataMode, TextNode, NodeRelationship
 from llama_index.core.utils import get_tqdm_iterable
 
@@ -23,18 +24,13 @@ class UtteranceReader(BaseReader):
         self._ignore_transcript_notes = ignore_transcript_notes
         self._ignore_alls = ignore_alls
         self._ignore_other = ignore_other
-        
-    def create_document(self, id_, context, metadata):
-        return Document(id_=id_,
-                        text=json.dumps(context),
-                        metadata=metadata)
-        
+ 
     def load_data(self, file: Path,
                   extra_info: Optional[Dict] = None
     ) -> List[Document]:
         """Parse the jsonl file into separate Documents for each conversation."""
         # NOTE: This part doesn't scale particularly well, since it loads all of the conversations
-        # into our memory all at once. Unfortunately this is also what most LlamaIndex Readers tend to do!
+        # into our memory all at once. Unfortunately this is also what most LlamaIndex file Readers tend to do!
         all_convos = []
 
         current_conversation_id = None
@@ -47,11 +43,14 @@ class UtteranceReader(BaseReader):
                     current_conversation_id = record['conversation_id']
 
                 if current_conversation_id != record['conversation_id']:  # New conversation started.
-                    metadata = {"speakers": list(current_conversation_speakers)}  # NOTE: Could add season, episode information here.
+                    season, episode, scene, _ = record['conversation_id'].split('_')
+                    metadata = {"speakers": list(current_conversation_speakers),
+                                "season": season, "episode": episode, "scene": scene}
                     all_convos.append(
-                        self.create_document(id_=current_conversation_id,
-                                             context=current_conversation_content,
-                                             metadata=metadata)
+                        Document(id_=current_conversation_id,
+                                             text=json.dumps(current_conversation_content),
+                                             metadata=metadata,
+                                             excluded_embed_metadata_keys=['speakers'])
                     )
 
                     # Reset information.
@@ -76,12 +75,18 @@ class UtteranceReader(BaseReader):
                     current_conversation_content.append(record)
 
             # End of loop. Clean up with the last conversation.
-            metadata = {"speakers": list(current_conversation_speakers)}
+            season, episode, scene, _ = record['conversation_id'].split('_')
+            season = int(season[1:])
+            episode = int(episode[1:])
+            scene = int(scene[1:])
+            metadata = {"speakers": list(current_conversation_speakers),
+                        "season": season, "episode": episode, "scene": scene}
+
             all_convos.append(
-                self.create_document(id_=current_conversation_id,
-                                        context=current_conversation_content,
-                                        metadata=metadata)
-            )
+                Document(id_=current_conversation_id,
+                        context=json.dumps(current_conversation_content),
+                        metadata=metadata,
+                        excluded_embed_metadata_keys=['speakers']))
         return all_convos
                     
 
@@ -91,7 +96,7 @@ class UtteranceNodeParser(NodeParser):
     Splits a document into Nodes using custom JSON splitting logic.
 
     Args:
-        include_metadata (bool): whether to include metadata in nodes
+        include_metadata (bool): whether to include metadata in nodes [nonfunc]
         include_prev_next_rel (bool): whether to include prev/next relationships
 
     """
@@ -134,6 +139,7 @@ class UtteranceNodeParser(NodeParser):
         
     def get_nodes_from_node(self, node: BaseNode) -> List[TextNode]:
         """Get nodes from document."""
+        toplevel_metadata = node.metadata
         text = node.get_content(metadata_mode=MetadataMode.NONE)
         try:
             data = json.loads(text)
@@ -145,14 +151,20 @@ class UtteranceNodeParser(NodeParser):
         
         if isinstance(data, list):
             previous_node = None
-            for json_object in data:
+            for ix, json_object in enumerate(data):
+                metadata_fields = ["season", "episode", "scene"]
+                inherited_metadata = {field: toplevel_metadata[field] for field in metadata_fields}
                 node = TextNode(id_=json_object['id'], text=json_object['text'],
                                 metadata={'speaker': json_object['speaker'],
-                                          'conversation_id': json_object['conversation_id']})
-                json_nodes.append(node)
+                                          'conversation_id': json_object['conversation_id'],
+                                          **inherited_metadata})
+                node.excluded_embed_metadata_keys = ['speaker']
             if previous_node is not None:
                 node.relationships[NodeRelationship.PREVIOUS] = previous_node.node_id
-                previous_node.relationships[NodeRelationship.NEXT] = node.node_id
+                data[ix-1].relationships[NodeRelationship.NEXT] = node.node_id
+
+            json_nodes.append(node)
+            node = previous_node
                     
         else:
             raise ValueError("JSON is invalid")
